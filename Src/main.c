@@ -334,13 +334,13 @@ void w55500init() {
 	if(ctlwizchip(CW_INIT_WIZCHIP,(void*)memsize) == -1){
 		//init fail
 		//printf("WIZCHIP Initialized fail.\r\n");
-		  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
-		  HAL_Delay(100);
-		  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
-		  HAL_Delay(100);
 
 		while(1);
 	}
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
+	  HAL_Delay(100);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
+	  HAL_Delay(100);
 
 	do{
 		if(ctlwizchip(CW_GET_PHYLINK, (void*)&tmp) == -1){};
