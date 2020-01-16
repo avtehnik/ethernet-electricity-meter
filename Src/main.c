@@ -334,13 +334,15 @@ void w55500init() {
 	if(ctlwizchip(CW_INIT_WIZCHIP,(void*)memsize) == -1){
 		//init fail
 		//printf("WIZCHIP Initialized fail.\r\n");
-
 		while(1);
 	}
 	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
 	  HAL_Delay(100);
 	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
 	  HAL_Delay(100);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
+	  HAL_Delay(100);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
 
 	do{
 		if(ctlwizchip(CW_GET_PHYLINK, (void*)&tmp) == -1){};
@@ -358,6 +360,16 @@ void w55500init() {
 	setSIPR(net_info.ip);			//set IP addr
 	setGAR(net_info.gw);			//set gate way
 	setSUBR(net_info.sn);			//set subnet
+
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
+	  HAL_Delay(100);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
+	  HAL_Delay(100);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
+	  HAL_Delay(100);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
+
+
 ///////////////////////////////////////////
 
 	return;
@@ -435,10 +447,11 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  HAL_Delay(100);
+//	  HAL_Delay(100);
 	  HAL_UART_Receive_IT(&huart1, response, 25);
 	  updateValues();
-
+//	  HAL_GPIO_TogglePin(PIN_LED_GPIO_Port, PIN_LED_Pin);
+	  HAL_Delay(200);
   }
   /* USER CODE END 3 */
 }

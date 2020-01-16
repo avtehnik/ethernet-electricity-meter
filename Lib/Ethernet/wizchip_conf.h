@@ -72,7 +72,7 @@ extern "C" {
 #define W5500						5500
 
 #ifndef _WIZCHIP_
-#define _WIZCHIP_                      W5100S   // W5100, W5100S, W5200, W5300, W5500
+#define _WIZCHIP_                      W5500   // W5100, W5100S, W5200, W5300, W5500
 #endif
 
 #define _WIZCHIP_IO_MODE_NONE_         0x0000
@@ -232,7 +232,7 @@ extern "C" {
 typedef struct __WIZCHIP
 {
    uint16_t  if_mode;               ///< host interface mode
-   uint8_t   id[7];                 ///< @b WIZCHIP ID such as @b 5100, @b 5200, @b 5500, and so on.
+   uint8_t   id[6];                 ///< @b WIZCHIP ID such as @b 5100, @b 5200, @b 5500, and so on.
    /**
     * The set of critical section callback func.
     */
