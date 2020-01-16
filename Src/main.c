@@ -96,10 +96,17 @@ static const uint16_t crcTable[] = {
 #define PZEM_BAUD_RATE 9600
 uint8_t _addr = 0x42;
 
-#define DATA_BUF_SIZE   200
+#define DATA_BUF_SIZE   500
 
+#define HTTP_SOCKET     2
 uint8_t gDATABUF[DATA_BUF_SIZE];
 uint8_t gateWay[4] = {192, 168, 1, 1};
+
+#define json_answer	"HTTP/1.0 200 OK\r\n"\
+		"Content-Type: application/json\r\n"\
+		"Access-Control-Allow-Origin: *\r\n"\
+		"\r\n"\
+		"{\"voltage\": %.2f, \"current\": %.6f, \"power\": %.2f, \"energy\": %.2f, \"frequency\: %.2f}"\
 
 /* USER CODE END PD */
 
@@ -202,8 +209,6 @@ uint8_t sendCmd8(uint8_t cmd, uint16_t rAddr, uint16_t val, uint8_t check){
 uint8_t updateValues()
 {
     //static uint8_t buffer[] = {0x00, CMD_RIR, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x00};
-    static uint8_t response[25];
-
     // If we read before the update time limit, do not update
 //    if(_lastRead + UPDATE_TIME > millis()){
 //        return 0;
@@ -216,40 +221,6 @@ uint8_t updateValues()
 //    if(recieve(response, 25) != 25){ // Something went wrong
 //        return 1;
 //    }
-
-
-
-    // Update the current values
-    _currentValues.voltage = ((uint32_t)response[3] << 8 | // Raw voltage in 0.1V
-                              (uint32_t)response[4])/10.0;
-
-    _currentValues.current = ((uint32_t)response[5] << 8 | // Raw current in 0.001A
-                              (uint32_t)response[6] |
-                              (uint32_t)response[7] << 24 |
-                              (uint32_t)response[8] << 16) / 1000.0;
-
-    _currentValues.power =   ((uint32_t)response[9] << 8 | // Raw power in 0.1W
-                              (uint32_t)response[10] |
-                              (uint32_t)response[11] << 24 |
-                              (uint32_t)response[12] << 16) / 10.0;
-
-    _currentValues.energy =  ((uint32_t)response[13] << 8 | // Raw Energy in 1Wh
-                              (uint32_t)response[14] |
-                              (uint32_t)response[15] << 24 |
-                              (uint32_t)response[16] << 16) / 1000.0;
-
-    _currentValues.frequeny =((uint32_t)response[17] << 8 | // Raw Frequency in 0.1Hz
-                              (uint32_t)response[18]) / 10.0;
-
-    _currentValues.pf =      ((uint32_t)response[19] << 8 | // Raw pf in 0.01
-                              (uint32_t)response[20])/100.0;
-
-    _currentValues.alarms =  ((uint32_t)response[21] << 8 | // Raw alarm value
-                              (uint32_t)response[22]);
-
-    // Record current time as _lastRead
-//    _lastRead = millis();
-
     return 0;
 }
 uint8_t byte;
@@ -398,6 +369,76 @@ void w55500init() {
 
 }
 
+int32_t loopback_tcps(uint8_t sn, uint8_t* buf, uint16_t port){
+	int32_t ret;
+	uint16_t size = 0, sentsize=0;
+	uint8_t *url;
+
+	switch(getSn_SR(sn)){
+		case SOCK_ESTABLISHED :
+			if(getSn_IR(sn) & Sn_IR_CON){
+//				printf("%d:Connected\r\n",sn);
+				setSn_IR(sn,Sn_IR_CON);
+			}
+			if((size = getSn_RX_RSR(sn)) > 0){
+				if(size > DATA_BUF_SIZE) size = DATA_BUF_SIZE;
+				ret = recv(sn,buf,size);
+				if(ret <= 0) return ret;
+				sentsize = 0;
+				if(memcmp(buf, "GET ", 4)==0){
+					// extract URL from request header
+					url = buf + 4;
+					//http data fill
+					if(memcmp(url, "/info", 5)==0){
+						sprintf(buf, json_answer,
+								 _currentValues.voltage,
+							     _currentValues.current,
+								 _currentValues.power,
+								 _currentValues.energy,
+								_currentValues.frequeny
+								);
+					}
+
+					size=strlen((const char*)buf);
+
+
+					//sending answer
+					while(size != sentsize){
+						ret = send(sn,buf+sentsize,size-sentsize);
+						if(ret < 0){
+							close(sn);
+							return ret;
+						}
+						sentsize += ret; // Don't care SOCKERR_BUSY, because it is zero.
+					}
+				}
+				//ending
+				disconnect(sn);
+
+			}
+			break;
+		case SOCK_CLOSE_WAIT :
+//			printf("%d:CloseWait\r\n",sn);
+			if((ret=disconnect(sn)) != SOCK_OK) return ret;
+//			printf("%d:Closed\r\n",sn);
+			break;
+		case SOCK_INIT :
+//			printf("%d:Listen, port [%d]\r\n",sn, port);
+			if( (ret = listen(sn)) != SOCK_OK) return ret;
+			break;
+		case SOCK_CLOSED:
+//			printf("%d:LBTStart\r\n",sn);
+			if((ret=socket(sn,Sn_MR_TCP,port,0x00)) != sn)
+			return ret;
+	//		printf("%d:Opened\r\n",sn);
+			break;
+		default:
+			break;
+	}
+	return 1;
+}
+
+
 
 /* USER CODE END 0 */
 
@@ -451,7 +492,8 @@ int main(void)
 	  HAL_UART_Receive_IT(&huart1, response, 25);
 	  updateValues();
 //	  HAL_GPIO_TogglePin(PIN_LED_GPIO_Port, PIN_LED_Pin);
-	  HAL_Delay(200);
+	  loopback_tcps(HTTP_SOCKET,gDATABUF, 80);
+	  HAL_Delay(100);
   }
   /* USER CODE END 3 */
 }
