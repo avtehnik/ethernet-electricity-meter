@@ -188,9 +188,8 @@ uint8_t setCRC(uint8_t *buf, uint16_t len){
     return 0;
 }
 
-uint8_t sendCmd8(uint8_t cmd, uint16_t rAddr, uint16_t val, uint8_t check){
+uint8_t sendCmd8(uint8_t cmd, uint16_t rAddr, uint16_t val){
     uint8_t sendBuffer[8]; // Send buffer
-    uint8_t respBuffer[8]; // Response buffer (only used when check is true)
 
     sendBuffer[0] = 0xf8;                   // Set slave address
     sendBuffer[1] = cmd;                     // Set command
@@ -202,65 +201,65 @@ uint8_t sendCmd8(uint8_t cmd, uint16_t rAddr, uint16_t val, uint8_t check){
     sendBuffer[5] = (val) & 0xFF;            // Set low byte =//=
 
     setCRC(sendBuffer, 8);                   // Set CRC of frame
-
     HAL_UART_Transmit(&huart1, sendBuffer, sizeof(sendBuffer), HAL_MAX_DELAY);
-
-
-    if(check==1) {
-//        if(!recieve(respBuffer, 8)){ // if check enabled, read the response
-//            return 1;
-//        }
-
-        // Check if response is same as send
-        for(uint8_t i = 0; i < 8; i++){
-            if(sendBuffer[i] != respBuffer[i])
-                return 1;
-        }
-    }
     return 0;
 }
 
-uint8_t updateValues()
+uint8_t sendCmd4(uint8_t cmd){
+    uint8_t sendBuffer[4]; // Send buffer
+    sendBuffer[0] = 0xf8;                   // Set slave address
+    sendBuffer[1] = cmd;                     // Set command
+    setCRC(sendBuffer, 4);                   // Set CRC of frame
+    HAL_UART_Transmit(&huart1, sendBuffer, sizeof(sendBuffer), HAL_MAX_DELAY);
+    return 0;
+}
+
+void updateValues()
 {
-    sendCmd8(CMD_RIR, 0x00, 0x0A, 0);
+    sendCmd8(CMD_RIR, 0x00, 0x0A);
+}
+
+void resetEnergy()
+{
+	sendCmd4(CMD_REST);
 }
 
 uint8_t byte;
 int rx_bytes = 0;
 uint8_t response[26];
+uint8_t response[26];
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 	rx_bytes++;
-	HAL_GPIO_TogglePin(PIN_LED_GPIO_Port, PIN_LED_Pin);
     // Update the current values
-    _currentValues.voltage = ((uint32_t)response[3] << 8 | // Raw voltage in 0.1V
-                              (uint32_t)response[4])/10.0;
 
-    _currentValues.current = ((uint32_t)response[5] << 8 | // Raw current in 0.001A
-                              (uint32_t)response[6] |
-                              (uint32_t)response[7] << 24 |
-                              (uint32_t)response[8] << 16) / 1000.0;
+		HAL_GPIO_TogglePin(PIN_LED_GPIO_Port, PIN_LED_Pin);
+		_currentValues.voltage = ((uint32_t)response[3] << 8 | // Raw voltage in 0.1V
+								  (uint32_t)response[4])/10.0;
 
-    _currentValues.power =   ((uint32_t)response[9] << 8 | // Raw power in 0.1W
-                              (uint32_t)response[10] |
-                              (uint32_t)response[11] << 24 |
-                              (uint32_t)response[12] << 16) / 10.0;
+		_currentValues.current = ((uint32_t)response[5] << 8 | // Raw current in 0.001A
+								  (uint32_t)response[6] |
+								  (uint32_t)response[7] << 24 |
+								  (uint32_t)response[8] << 16) / 1000.0;
 
-    _currentValues.energy =  ((uint32_t)response[13] << 8 | // Raw Energy in 1Wh
-                              (uint32_t)response[14] |
-                              (uint32_t)response[15] << 24 |
-                              (uint32_t)response[16] << 16) / 1000.0;
+		_currentValues.power =   ((uint32_t)response[9] << 8 | // Raw power in 0.1W
+								  (uint32_t)response[10] |
+								  (uint32_t)response[11] << 24 |
+								  (uint32_t)response[12] << 16) / 10.0;
 
-    _currentValues.frequeny =((uint32_t)response[17] << 8 | // Raw Frequency in 0.1Hz
-                              (uint32_t)response[18]) / 10.0;
+		_currentValues.energy =  ((uint32_t)response[13] << 8 | // Raw Energy in 1Wh
+								  (uint32_t)response[14] |
+								  (uint32_t)response[15] << 24 |
+								  (uint32_t)response[16] << 16) / 1000.0;
 
-    _currentValues.pf =      ((uint32_t)response[19] << 8 | // Raw pf in 0.01
-                              (uint32_t)response[20])/100.0;
+		_currentValues.frequeny =((uint32_t)response[17] << 8 | // Raw Frequency in 0.1Hz
+								  (uint32_t)response[18]) / 10.0;
 
-    _currentValues.alarms =  ((uint32_t)response[21] << 8 | // Raw alarm value
-                              (uint32_t)response[22]);
+		_currentValues.pf =      ((uint32_t)response[19] << 8 | // Raw pf in 0.01
+								  (uint32_t)response[20])/100.0;
 
-
+		_currentValues.alarms =  ((uint32_t)response[21] << 8 | // Raw alarm value
+								  (uint32_t)response[22]);
 
 }
 
@@ -414,8 +413,30 @@ int32_t loopback_tcps(uint8_t sn, uint8_t* buf, uint16_t port){
 								_currentValues.frequeny,
 								udids
 								);
+					}else if(memcmp(url, "/reset", 6)==0){
+					    HAL_Delay(100);
+						HAL_UART_Receive_IT(&huart1, response, 4);
+						resetEnergy();
+					    HAL_Delay(100);
+						sprintf(buf, html_answer,
+								 _currentValues.voltage,
+							     _currentValues.current,
+								 _currentValues.power,
+								 _currentValues.energy,
+								_currentValues.frequeny,
+								udids
+								);
+					}else if(memcmp(url, "/pause", 6)==0){
+					    HAL_Delay(1000);
+						sprintf(buf, html_answer,
+								 _currentValues.voltage,
+							     _currentValues.current,
+								 _currentValues.power,
+								 _currentValues.energy,
+								_currentValues.frequeny,
+								udids
+								);
 					}else{
-
 						sprintf(buf, html_answer,
 								 _currentValues.voltage,
 							     _currentValues.current,
