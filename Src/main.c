@@ -23,7 +23,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <ctype.h>
+#include <stdbool.h>
+
 #include "socket.h"
+#include "dhcp.h"
 #include "wizchip_conf.h"
 /* USER CODE END Includes */
 
@@ -98,15 +102,25 @@ uint8_t _addr = 0x42;
 
 #define DATA_BUF_SIZE   500
 
+#define DHCP_SOCKET     0
 #define HTTP_SOCKET     2
 uint8_t gDATABUF[DATA_BUF_SIZE];
+uint8_t dhcp_buffer[1024];
 uint8_t gateWay[4] = {192, 168, 1, 1};
 
 #define json_answer	"HTTP/1.0 200 OK\r\n"\
 		"Content-Type: application/json\r\n"\
 		"Access-Control-Allow-Origin: *\r\n"\
 		"\r\n"\
-		"{\"voltage\": %.2f, \"current\": %.6f, \"power\": %.2f, \"energy\": %.2f, \"frequency\: %.2f}"\
+		"{\"voltage\": %.2f, \"current\": %.6f, \"power\": %.2f, \"energy\": %.2f, \"frequency\: %.2f, \"udid\":\"%s\"}"\
+
+#define html_answer	"HTTP/1.0 200 OK\r\n"\
+		"Content-Type: text/html\r\n"\
+		"\r\n"\
+		"voltage: %.2f <br> current: %.6f <br> power: %.2f <br>energy: %.2f<br> frequency: %.2f <br> udid: %s"\
+
+uint8_t udids[27];
+volatile uint32_t udid[3];
 
 /* USER CODE END PD */
 
@@ -208,21 +222,9 @@ uint8_t sendCmd8(uint8_t cmd, uint16_t rAddr, uint16_t val, uint8_t check){
 
 uint8_t updateValues()
 {
-    //static uint8_t buffer[] = {0x00, CMD_RIR, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x00};
-    // If we read before the update time limit, do not update
-//    if(_lastRead + UPDATE_TIME > millis()){
-//        return 0;
-//    }
-
-    // Read 10 registers starting at 0x00 (no check)
     sendCmd8(CMD_RIR, 0x00, 0x0A, 0);
-
-
-//    if(recieve(response, 25) != 25){ // Something went wrong
-//        return 1;
-//    }
-    return 0;
 }
+
 uint8_t byte;
 int rx_bytes = 0;
 uint8_t response[26];
@@ -288,6 +290,39 @@ void W5500_WriteByte(uint8_t byte) {
     W5500_WriteBuff(&byte, sizeof(byte));
 }
 
+volatile bool ip_assigned = false;
+
+void Callback_IPAssigned(void) {
+
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
+	  HAL_Delay(100);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
+	  HAL_Delay(200);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
+	  HAL_Delay(200);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
+	  HAL_Delay(200);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
+	  HAL_Delay(200);
+    ip_assigned = true;
+}
+
+void Callback_IPConflict(void) {
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
+	  HAL_Delay(100);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
+	  HAL_Delay(100);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
+	  HAL_Delay(100);
+	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
+while(1){}
+
+}
+
+// 1K should be enough, see https://forum.wiznet.io/t/topic/1612/2
+uint8_t dhcp_buffer[1024];
+uint32_t dhcp_ctr = 10000;
+
 void w55500init() {
 //    UART_Printf("\r\ninit() called!\r\n");
 //    UART_Printf("Registering W5500 callbacks...\r\n");
@@ -307,14 +342,6 @@ void w55500init() {
 		//printf("WIZCHIP Initialized fail.\r\n");
 		while(1);
 	}
-	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
-	  HAL_Delay(100);
-	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
-	  HAL_Delay(100);
-	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
-	  HAL_Delay(100);
-	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
-
 	do{
 		if(ctlwizchip(CW_GET_PHYLINK, (void*)&tmp) == -1){};
 			//printf("Unknown PHY Link stauts.\r\n");
@@ -332,40 +359,29 @@ void w55500init() {
 	setGAR(net_info.gw);			//set gate way
 	setSUBR(net_info.sn);			//set subnet
 
-	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
-	  HAL_Delay(100);
-	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
-	  HAL_Delay(100);
-	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_RESET);
-	  HAL_Delay(100);
-	  HAL_GPIO_WritePin(PIN_LED_GPIO_Port, PIN_LED_Pin, GPIO_PIN_SET);
-
-
 ///////////////////////////////////////////
 
-	return;
-//    DHCP_init(DHCP_SOCKET, dhcp_buffer);
-//    reg_dhcp_cbfunc(
-//           Callback_IPAssigned,
-//           Callback_IPAssigned,
-//           Callback_IPConflict
-//       );
-//
-//    uint32_t ctr = 10000;
-//	while((!ip_assigned) && (ctr > 0)) {
-//		DHCP_run();
-//		ctr--;
-//	}
-//	if(!ip_assigned) {
-////		UART_Printf("\r\nIP was not assigned :(\r\n");
-//		return;
-//	}
-//
-//	getIPfromDHCP(net_info.ip);
-//	getGWfromDHCP(net_info.gw);
-//	getSNfromDHCP(net_info.sn);
-//
-//	 wizchip_setnetinfo(&net_info);
+    DHCP_init(DHCP_SOCKET, dhcp_buffer);
+    reg_dhcp_cbfunc(
+           Callback_IPAssigned,
+           Callback_IPAssigned,
+           Callback_IPConflict
+       );
+
+	while((!ip_assigned) && (dhcp_ctr > 0)) {
+		DHCP_run();
+		dhcp_ctr--;
+	}
+	if(!ip_assigned) {
+//		UART_Printf("\r\nIP was not assigned :(\r\n");
+		return;
+	}
+
+	getIPfromDHCP(net_info.ip);
+	getGWfromDHCP(net_info.gw);
+	getSNfromDHCP(net_info.sn);
+
+	wizchip_setnetinfo(&net_info);
 
 }
 
@@ -395,7 +411,18 @@ int32_t loopback_tcps(uint8_t sn, uint8_t* buf, uint16_t port){
 							     _currentValues.current,
 								 _currentValues.power,
 								 _currentValues.energy,
-								_currentValues.frequeny
+								_currentValues.frequeny,
+								udids
+								);
+					}else{
+
+						sprintf(buf, html_answer,
+								 _currentValues.voltage,
+							     _currentValues.current,
+								 _currentValues.power,
+								 _currentValues.energy,
+								_currentValues.frequeny,
+								udids
 								);
 					}
 
@@ -449,8 +476,12 @@ int32_t loopback_tcps(uint8_t sn, uint8_t* buf, uint16_t port){
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-//	HAL_UART_RxCpltCallback
-//	HAL_UART_Receive_IT
+	udid[0] =  *((unsigned long *)0x1FFFF7F0);
+	udid[1] =  *((unsigned long *)0x1FFFF7EC);
+	udid[2] =  *((unsigned long *)0x1FFFF7E8);
+	sprintf(udids, "%08X-%08X-%08X",udid[0], udid[1],udid[2]);
+	uint8_t tmp;
+
   /* USER CODE END 1 */
   
 
@@ -483,17 +514,37 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  uint8_t link = 1;
+  uint8_t prev_link = 0;
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
 //	  HAL_Delay(100);
-	  HAL_UART_Receive_IT(&huart1, response, 25);
-	  updateValues();
+	  if(link == 1){
+		  HAL_UART_Receive_IT(&huart1, response, 25);
+		  updateValues();
+	  }
 //	  HAL_GPIO_TogglePin(PIN_LED_GPIO_Port, PIN_LED_Pin);
 	  loopback_tcps(HTTP_SOCKET,gDATABUF, 80);
 	  HAL_Delay(100);
+	  if(ctlwizchip(CW_GET_PHYLINK, (void*)&tmp) == 0){
+		  if(tmp == PHY_LINK_OFF){
+			  link = 0;
+		  }else{
+			  link = 1;
+		  }
+	  }
+	  if(prev_link!=link){
+		  dhcp_ctr = 10000;
+		  ip_assigned = false;
+		  while((!ip_assigned) && (dhcp_ctr > 0)) {
+		  		DHCP_run();
+		  		dhcp_ctr--;
+		  	}
+	  }
+	  prev_link = link;
   }
   /* USER CODE END 3 */
 }
