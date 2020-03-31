@@ -112,7 +112,7 @@ uint8_t gateWay[4] = {192, 168, 1, 1};
 		"Content-Type: application/json\r\n"\
 		"Access-Control-Allow-Origin: *\r\n"\
 		"\r\n"\
-		"{\"voltage\": %.2f, \"current\": %.6f, \"power\": %.2f, \"energy\": %.2f, \"frequency\: %.2f, \"udid\":\"%s\"}"\
+		"{\"voltage\": %.2f, \"current\": %.6f, \"power\": %.2f, \"energy\": %.2f, \"frequency\": %.2f, \"udid\":\"%s\"}"\
 
 #define html_answer	"HTTP/1.0 200 OK\r\n"\
 		"Content-Type: text/html\r\n"\
